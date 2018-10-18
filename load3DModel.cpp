@@ -137,7 +137,7 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 			for(unsigned int i = 0; i < face->mNumIndices; i++) {
 				int index = face->mIndices[i];
 				//if(mesh->mColors[0] != NULL) {
-					vboColors.push_back(0.5);
+					vboColors.push_back(0.3);
 					vboColors.push_back(0.5);
 					vboColors.push_back(1.0);
 					vboColors.push_back(1.0);
@@ -332,8 +332,6 @@ void displayGooch(void) {
 	float diffCool = 0.2; 
 	float diffWarm = 0.6;
 
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
     glUseProgram(shaderGooch);
 
 	int loc = glGetUniformLocation( shaderGooch, "uLPos" );
@@ -363,11 +361,9 @@ void displayGooch(void) {
 	loc = glGetUniformLocation( shaderGooch, "uDiffuseCool" );
 	glUniform2f(loc, 1, diffCool);
 	
-	// glViewport(winWidth, 0, winWidth, winHeight);
     drawAxis(shaderGooch);
 	drawMesh(shaderGooch);
-    
-	// glFlush();
+
 }
 
 void displayPhong(void) {
@@ -381,7 +377,9 @@ void displayPhong(void) {
 	glm::vec3 lookAt	= glm::vec3(scene_center.x, scene_center.y, scene_center.z);
 	glm::vec3 up		= glm::vec3(0.0, 1.0, 0.0);
 		
-	glm::mat4 ViewMat	= glm::lookAt( camPos, lookAt, up);
+	glm::mat4 ViewMat	= glm::lookAt( 	camPos, 
+										lookAt, 
+										up);
 
 	glm::mat4 ProjMat 	= glm::perspective( 70.0, 1.0, 0.01, 100.0);
 	glm::mat4 ModelMat 	= glm::mat4(1.0);
@@ -394,32 +392,20 @@ void displayPhong(void) {
 	
 	glm::mat4 normalMat		= glm::transpose(glm::inverse(ModelMat));
 
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
     glUseProgram(shaderPhong);
-
-	int loc = glGetUniformLocation( shaderPhong, "uLPos" );
-	glUniform3fv(loc, 1, glm::value_ptr(lightPos));
-
-	loc = glGetUniformLocation( shaderPhong, "uMVP" );
+		
+	int loc = glGetUniformLocation( shaderPhong, "uMVP" );
 	glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(MVP));
 
 	loc = glGetUniformLocation( shaderPhong, "uN" );
 	glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(normalMat));
-	
 	loc = glGetUniformLocation( shaderPhong, "uM" );
 	glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(ModelMat));
-
+	loc = glGetUniformLocation( shaderPhong, "uLPos" );
+	glUniform3fv(loc, 1, glm::value_ptr(lightPos));
 	loc = glGetUniformLocation( shaderPhong, "uCamPos" );
 	glUniform3fv(loc, 1, glm::value_ptr(camPos));
 
-	// glColor3f(1,0,0); 
-    // glClear(GL_COLOR_BUFFER_BIT);
-    // glLineWidth(2);
-
-    // glMatrixMode(GL_PROJECTION);
-
-   	// glViewport(0, 0, winWidth, winHeight);
   	drawAxis(shaderPhong);
 	drawMesh(shaderPhong);
 
@@ -428,16 +414,15 @@ void displayPhong(void) {
 void displayBoth(void){
 
 	glColor3f(1,0,0); 
-    glClear(GL_COLOR_BUFFER_BIT);
-    glLineWidth(2);
+	glLineWidth(2);
 
-    glMatrixMode(GL_PROJECTION);
-
-   	glViewport(0, 0, winWidth, winHeight);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+   	
+	glViewport(0, 0, winWidth, winHeight);
   	displayPhong();
 
 	glViewport(winWidth, 0, winWidth, winHeight);
-    displayGooch();
+	displayGooch();
     
 	glFlush();
 }

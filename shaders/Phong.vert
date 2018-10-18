@@ -14,5 +14,6 @@ out vec3 vPosW;
 void main(void) { 		
 	vPosW = (uM * vec4(aPosition, 1.0)).xyz; 
 	vNormal = normalize((uN * vec4(aNormal, 1.0)).xyz); 			
+	
 	gl_Position = uMVP * vec4( aPosition, 1.0 );  
 } 
