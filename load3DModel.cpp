@@ -131,33 +131,60 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 	for (unsigned int n = 0; n < nd->mNumMeshes; ++n) {
 		const aiMesh* mesh = scene->mMeshes[nd->mMeshes[n]];
 
-		for (unsigned int t = 0; t < mesh->mNumFaces; ++t) {
+		for (unsigned int t = 0; t < mesh->mNumFaces; ++t) 
+		{
 			const aiFace* face = &mesh->mFaces[t];
 
-			for(unsigned int i = 0; i < face->mNumIndices; i++) {
+			// if(mesh->mColors[0] != NULL)
+			// 	std::cout << "Number of colors in mesh is " << mesh->mColors[0][0].r << endl;
+			// else
+			// 	std::cout << "Number of colors in mesh is none\n";
+			if(mesh->mColors[0] != NULL)
+			for(int c = 0; c < AI_MAX_NUMBER_OF_COLOR_SETS; c++)
+			{
+				for(int v = 0; v < mesh->mNumVertices; v++)
+				{
+					if(mesh->HasVertexColors(v))
+					{
+						vboColors.push_back(mesh->mColors[c][v].r);
+						vboColors.push_back(mesh->mColors[c][v].g);
+						vboColors.push_back(mesh->mColors[c][v].b);
+						vboColors.push_back(mesh->mColors[c][v].a);
+					}
+				}
+
+			}
+			
+			for(unsigned int i = 0; i < face->mNumIndices; i++) 
+			{
 				int index = face->mIndices[i];
-				//if(mesh->mColors[0] != NULL) {
-					vboColors.push_back(0.3);
+				
+				/*if(mesh->mColors[0] != NULL) {
+					vboColors.push_back(0.5);
 					vboColors.push_back(0.5);
 					vboColors.push_back(1.0);
 					vboColors.push_back(1.0);
-				//	}
+				}*/
+				
 				if(mesh->mNormals != NULL) {
 					vboNormals.push_back(mesh->mNormals[index].x);
 					vboNormals.push_back(mesh->mNormals[index].y);
 					vboNormals.push_back(mesh->mNormals[index].z);
-					}
+				}
+				
 				vboVertices.push_back(mesh->mVertices[index].x);
 				vboVertices.push_back(mesh->mVertices[index].y);
 				vboVertices.push_back(mesh->mVertices[index].z);
 				totVertices++;
-				}
+				
 			}
 		}
+	}
 
 	for (unsigned int n = 0; n < nd->mNumChildren; ++n) {
 		totVertices += traverseScene(sc, nd->mChildren[n]);
-		}
+	}
+	
 	return totVertices;
 }
 
@@ -627,7 +654,7 @@ int main(int argc, char *argv[]) {
 
     GLFWwindow* window;
 
-	char meshFilename[] = "models/bunny.obj";
+	char meshFilename[] = "models/dragon.obj";
 
     window = initGLFW(argv[0], winWidth, winHeight);
 
