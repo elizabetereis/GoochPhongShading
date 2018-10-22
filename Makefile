@@ -18,6 +18,7 @@ GLFW_LDFLAGS 	=	-lglfw
 GLUT_LDFLAGS 	=	-lglut
 ASSIMP_LDFLAGS 	=	-lassimp
 SOIL_LDFLAGS	= 	-lSOIL
+DEVIL_LDFLAGS   =   -lIL
 
 OBJFILES 		=	shaders/initShaders.o
 
@@ -55,7 +56,7 @@ drawCubeRotate:	 $(OBJFILES) drawCubeRotate.o
 		
 load3DModel:	$(OBJFILES) load3DModel.o
 	@echo "Linking ...."
-	$(CXX) $^ -o $@ $(LIB_PATH) $(GL_LDFLAGS) $(GLFW_LDFLAGS) $(ASSIMP_LDFLAGS)
+	$(CXX) $^ -o $@ $(LIB_PATH) $(GL_LDFLAGS) $(GLFW_LDFLAGS) $(ASSIMP_LDFLAGS) $(DEVIL_LDFLAGS)
 		
 clean:	
 	@echo "Clearing ..."
