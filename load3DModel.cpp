@@ -1,3 +1,5 @@
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 #include <iostream>
 #include <cfloat>
@@ -37,8 +39,8 @@ using namespace std;
 
 GLuint shaderPhong,shaderGooch;
 
-GLuint 	axisVBO[3];
-GLuint 	meshVBO[3];
+GLuint 	axisVBO[4];
+GLuint 	meshVBO[4];
 GLuint 	meshSize;
 
 struct MaterialProperties{
@@ -49,15 +51,21 @@ struct MaterialProperties{
 	int texCount;
 };
 
+struct Texture {
+    unsigned int id;
+    string type;
+    string path;  // we store the path of the texture to compare with other textures
+};
+
 double  last;
-GLint texIndex;
 
 vector<GLfloat> vboVertices;
 vector<GLfloat> vboNormals;
 vector<GLfloat> vboColors;
-vector<GLfloat> vboTextures;
+vector<glm::vec2> vboTextures;
 
 struct MaterialProperties mMaterial;
+vector<Texture> textures_loaded; 
 
 int winWidth 	= 600, 
 	winHeight 	= 600;
@@ -131,10 +139,6 @@ void color4_to_float4(const aiColor4D *c, float f[4])
 	f[3] = c->a;
 }
 
-/// ***********************************************************************
-/// **
-/// ***********************************************************************
-
 void set_float4(float f[4], float a, float b, float c, float d)
 {
 	f[0] = a;
@@ -146,102 +150,64 @@ void set_float4(float f[4], float a, float b, float c, float d)
 /// ***********************************************************************
 /// **
 /// ***********************************************************************
-int LoadImage(char *filename)
+unsigned int TextureFromFile(const char *path)
 {
-    ILboolean success; 
-    ILuint image; 
- 
-    ilGenImages(1, &image); /* Generation of one image name */
-    ilBindImage(image); /* Binding of image name */
-	
-    success = ilLoadImage(filename); /* Loading of the image filename by DevIL */
- 
-    if (success) /* If no error occured: */
+    string filename = "models/cat/cat-atlas.jpg";
+
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+    unsigned char *data = stbi_load(filename.c_str(), &width, &height, &nrComponents, 0);
+    
+	if (data)
     {
-        /* Convert every colour component into unsigned byte. If your image contains alpha channel you can replace IL_RGB with IL_RGBA */
-        success = ilConvertImage(IL_RGBA, IL_UNSIGNED_BYTE); 
- 
-        if (!success)
-           {
-                 return -1;
-           }
+        GLenum format;
+        if (nrComponents == 1)
+            format = GL_RED;
+        else if (nrComponents == 3)
+            format = GL_RGB;
+        else if (nrComponents == 4)
+            format = GL_RGBA;
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
     }
     else
-        return -1;
- 
-    return image;
+    {
+        std::cout << "Texture failed to load at path: " << filename << std::endl;
+        stbi_image_free(data);
+    }
+
+    return textureID;
 }
 
-bool loadGLTextures(string pModelPath)
+vector<Texture> loadMaterialTextures(const aiMaterial *mat, aiTextureType type, string typeName)
 {
-	ILboolean success;
-	
-	ilInit(); // initialization of DevIL  
+    vector<Texture> textures;
+    
+	for(unsigned int i = 0; i < mat->GetTextureCount(type); i++)
+    {
+        aiString str;
+        mat->GetTexture(type, i, &str);
+        Texture texture;
+        texture.id = TextureFromFile(str.C_Str());
+        texture.type = typeName;
+        texture.path = str.data;
 
-	// scan scene's materials for textures 
-	for (unsigned int m = 0; m < scene->mNumMaterials; ++m)
-	{
-		int texIndex = 0;
-		aiString path;// = aiString(pModelPath);	// filename
+        textures.push_back(texture);
+    }
 
-		aiReturn texFound = scene->mMaterials[m]->GetTexture(aiTextureType_DIFFUSE, texIndex, &path);
-		while (texFound == AI_SUCCESS) {
-			textureIdMap[path.data] = 0; //fill map with textures, OpenGL image ids set to 0 
-			texIndex++;
-			texFound = scene->mMaterials[m]->GetTexture(aiTextureType_DIFFUSE, texIndex, &path);
-		}
-	}
-
-	int numTextures = textureIdMap.size();
-
-	// create and fill array with DevIL texture ids
-	ILuint* imageIds = new ILuint[numTextures];
-	ilGenImages(numTextures, imageIds); 
-
-	// create and fill array with GL texture ids 
-	GLuint* textureIds = new GLuint[numTextures];
-	glGenTextures(numTextures, textureIds); // Texture name generation
-
-	// get iterator
-	std::map<std::string, GLuint>::iterator itr = textureIdMap.begin();
-	int i = 0;
-	for (; itr != textureIdMap.end(); ++i, ++itr)
-	{
-		//save IL image ID
-		std::string filename = (*itr).first;  // get filename
-		(*itr).second = textureIds[i];	  // save texture id for filename in map
-		ilBindImage(imageIds[i]); // Binding of DevIL image name
-		ilEnable(IL_ORIGIN_SET);
-		ilOriginFunc(IL_ORIGIN_LOWER_LEFT); 
-		success = ilLoadImage((ILstring)filename.c_str());
-
-		if (success) {
-			// Convert image to RGBA
-			ilConvertImage(IL_RGBA, IL_UNSIGNED_BYTE); 
-
-			// Create and load textures to OpenGL
-			glBindTexture(GL_TEXTURE_2D, textureIds[i]); 
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); 
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ilGetInteger(IL_IMAGE_WIDTH),
-			ilGetInteger(IL_IMAGE_HEIGHT), 0, GL_RGBA, GL_UNSIGNED_BYTE,
-			ilGetData()); 
-		}
-		else 
-			cout << "Couldn't load Image: " << filename << endl;
-	}
-	/// Because we have already copied image data into texture data
-	//we can release memory used by image. 
-	ilDeleteImages(numTextures, imageIds); 
-
-	//Cleanup
-	delete [] imageIds;
-	delete [] textureIds;
-
-	//return success;
-	return true;
-}
-
+    return textures;
+}  
 
 int traverseScene(	const aiScene *sc, const aiNode* nd) {
 
@@ -282,20 +248,23 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 
 		if (mesh->HasTextureCoords(0)) 
 		{	
-			for (unsigned int k = 0; k < mesh->mNumVertices; ++k) {
-				vboTextures.push_back(mesh->mTextureCoords[0][k].x);
-				vboTextures.push_back(mesh->mTextureCoords[0][k].y);				
+			for (unsigned int k = 0; k < mesh->mNumVertices; k++) {
+				glm::vec2 vec;
+				vec.x = mesh->mTextureCoords[0][k].x;
+				vec.y = mesh->mTextureCoords[0][k].y;
+				vboTextures.push_back(vec);		
 			}
-		}
+		}else
+    		vboTextures.push_back(glm::vec2(0.0f, 0.0f));
 
-		if(AI_SUCCESS == mtl->GetTexture(aiTextureType_DIFFUSE, 0, &texPath)){
-				//bind texture
-				unsigned int texId = textureIdMap[texPath.data];
-				texIndex = texId;
-				mMaterial.texCount = 1;
+		if(mesh->mMaterialIndex >= 0)
+		{
+			vector<Texture> diffuseMaps = loadMaterialTextures(mtl, aiTextureType_DIFFUSE, "texture_diffuse");
+			textures_loaded.insert(textures_loaded.end(), diffuseMaps.begin(), diffuseMaps.end());
+			
+			vector<Texture> specularMaps = loadMaterialTextures(mtl, aiTextureType_SPECULAR, "texture_specular");
+			textures_loaded.insert(textures_loaded.end(), specularMaps.begin(), specularMaps.end());
 		}
-		else
-			mMaterial.texCount = 0;
 
 		for (unsigned int t = 0; t < mesh->mNumFaces; ++t) 
 		{
@@ -409,8 +378,14 @@ void createAxis() {
 							0.0, 1.0, 0.0, 1.0,
 							0.0, 0.0, 1.0, 1.0
 						}; 
+
+	GLfloat textures[]= { 	1.0, 1.0,
+							1.0, 0.0,
+							0.0, 0.0,
+							0.0, 1.0
+						}; 
 	
-	glGenBuffers(3, axisVBO);
+	glGenBuffers(4, axisVBO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[0]);
 
@@ -423,6 +398,10 @@ void createAxis() {
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, axisVBO[2]);
 
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, 3*2*sizeof(unsigned int), lines, GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, axisVBO[3]);
+
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, 4*2*sizeof(float), textures, GL_STATIC_DRAW);
 	
 }
 		
@@ -432,7 +411,7 @@ void createAxis() {
 
 void drawAxis(GLuint shader) {
 
-	int attrV, attrC; 
+	int attrV, attrC, attrT; 
 	
 	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[0]); 		
 	attrV = glGetAttribLocation(shader, "aPosition");
@@ -446,6 +425,11 @@ void drawAxis(GLuint shader) {
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, axisVBO[2]);
 	glDrawElements(GL_LINES, 6, GL_UNSIGNED_INT, BUFFER_OFFSET(0));
+
+	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[3]); 	
+	attrT = glGetAttribLocation(shader, "aText");
+	glVertexAttribPointer(attrT, 2, GL_FLOAT, GL_FALSE, 0, 0);
+	glEnableVertexAttribArray(attrT);  
 
 	glDisableVertexAttribArray(attrV);
 	glDisableVertexAttribArray(attrC);
@@ -840,9 +824,6 @@ int main(int argc, char *argv[]) {
 	    loadMesh(argv[1]);
 	else
     	loadMesh(meshFilename);
-	
-	loadGLTextures(meshFilename);
-	cout << "Load return " << LoadImage(filename) << endl;
 
     GLFW_MainLoop(window);
 
