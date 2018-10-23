@@ -37,14 +37,21 @@
 
 using namespace std;
 
+int numIndices = 0;
+
 GLuint shaderPhong,shaderGooch;
 
-GLuint 	axisVBO[4];
-GLuint 	meshVBO[4];
 GLuint 	meshSize;
 
-struct MaterialProperties{
+GLuint VAO, VBO, EBO;
 
+struct Vertex {
+    glm::vec3 Position;
+    glm::vec3 Normal;
+    glm::vec2 TexCoords;
+};
+
+struct MaterialProperties{
 	aiColor4D diffuse;
 	aiColor4D ambient;
 	aiColor4D specular;
@@ -62,10 +69,12 @@ double  last;
 vector<GLfloat> vboVertices;
 vector<GLfloat> vboNormals;
 vector<GLfloat> vboColors;
-vector<glm::vec2> vboTextures;
+
+vector<Texture> textures_loaded; 
+vector<Vertex> vertices;
+vector<GLint> indices;
 
 struct MaterialProperties mMaterial;
-vector<Texture> textures_loaded; 
 
 int winWidth 	= 600, 
 	winHeight 	= 600;
@@ -150,18 +159,22 @@ void set_float4(float f[4], float a, float b, float c, float d)
 /// ***********************************************************************
 /// **
 /// ***********************************************************************
-unsigned int TextureFromFile(const char *path)
+unsigned int TextureFromFile(const char *filename)
 {
-    string filename = "models/cat/cat-atlas.jpg";
+	filename = "models/cat/cat-atlas.jpg";
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     unsigned int textureID;
     glGenTextures(1, &textureID);
 
     int width, height, nrComponents;
-    unsigned char *data = stbi_load(filename.c_str(), &width, &height, &nrComponents, 0);
+    unsigned char *data = stbi_load(filename, &width, &height, &nrComponents, 0);
     
-	if (data)
-    {
+	if(data){
         GLenum format;
         if (nrComponents == 1)
             format = GL_RED;
@@ -173,19 +186,11 @@ unsigned int TextureFromFile(const char *path)
         glBindTexture(GL_TEXTURE_2D, textureID);
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        stbi_image_free(data);
-    }
-    else
-    {
+    }else{
         std::cout << "Texture failed to load at path: " << filename << std::endl;
-        stbi_image_free(data);
     }
+
+	stbi_image_free(data);
 
     return textureID;
 }
@@ -209,9 +214,47 @@ vector<Texture> loadMaterialTextures(const aiMaterial *mat, aiTextureType type, 
     return textures;
 }  
 
-int traverseScene(	const aiScene *sc, const aiNode* nd) {
+void loadMaterialProperties(const aiMesh* mesh, const aiMaterial *mtl){
+
+	aiColor4D ambient;
+	aiColor4D diffuse;
+	aiColor4D specular;
+	
+	//colors
+	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_AMBIENT, &ambient)){
+		mMaterial.ambient = ambient;
+	}
+
+	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_DIFFUSE, &diffuse)){
+		mMaterial.diffuse = diffuse;
+	}
+	
+	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_SPECULAR, &specular)){
+		mMaterial.specular = specular;
+	}
+
+	//textures
+	if(mesh->mMaterialIndex >= 0)
+	{
+		vector<Texture> diffuseMaps = loadMaterialTextures(mtl, aiTextureType_DIFFUSE, "texture_diffuse");
+		textures_loaded.insert(textures_loaded.end(), diffuseMaps.begin(), diffuseMaps.end());
+		
+		vector<Texture> specularMaps = loadMaterialTextures(mtl, aiTextureType_SPECULAR, "texture_specular");
+		textures_loaded.insert(textures_loaded.end(), specularMaps.begin(), specularMaps.end());
+
+        std::vector<Texture> normalMaps = loadMaterialTextures(mtl, aiTextureType_HEIGHT, "texture_normal");
+        textures_loaded.insert(textures_loaded.end(), normalMaps.begin(), normalMaps.end());
+
+        std::vector<Texture> heightMaps = loadMaterialTextures(mtl, aiTextureType_AMBIENT, "texture_height");
+        textures_loaded.insert(textures_loaded.end(), heightMaps.begin(), heightMaps.end());
+	}
+
+}
+
+int traverseScene(const aiScene *sc, const aiNode* nd) {
 
 	int totVertices = 0;
+	vector<Vertex> vertices;
 
 	/* draw all meshes assigned to this node */
 	for (unsigned int n = 0; n < nd->mNumMeshes; ++n) {
@@ -219,52 +262,7 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 		const aiMesh* mesh = scene->mMeshes[nd->mMeshes[n]];
 		const aiMaterial *mtl = scene->mMaterials[mesh->mMaterialIndex];
 
-		aiColor4D ambient;
-		aiColor4D diffuse;
-		aiColor4D specular;
-		aiString texPath;
-		float ilum = 1.0f;
-		int shine;
-		
-		if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_AMBIENT, &ambient)){
-			mMaterial.ambient = ambient;
-		}
-
-    	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_DIFFUSE, &diffuse)){
-			mMaterial.diffuse = diffuse;
-		}
-		
-		if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_SPECULAR, &specular)){
-			mMaterial.specular = specular;
-		}
-		
-		// if (AI_SUCCESS == aiGetMaterialFloat(mtl, AI_MATKEY_REFRACTI, &ilum)){ //TODO: wrong matkey
-		// 	cout << "Ilum " << ilum << endl;
-		// }
-		
-		// if (AI_SUCCESS == aiGetMaterialInteger(mtl, AI_MATKEY_SHININESS, &shine)){//TODO: wrong matkey
-		// 	cout << "Shine " << shine << endl;
-		// }
-
-		if (mesh->HasTextureCoords(0)) 
-		{	
-			for (unsigned int k = 0; k < mesh->mNumVertices; k++) {
-				glm::vec2 vec;
-				vec.x = mesh->mTextureCoords[0][k].x;
-				vec.y = mesh->mTextureCoords[0][k].y;
-				vboTextures.push_back(vec);		
-			}
-		}else
-    		vboTextures.push_back(glm::vec2(0.0f, 0.0f));
-
-		if(mesh->mMaterialIndex >= 0)
-		{
-			vector<Texture> diffuseMaps = loadMaterialTextures(mtl, aiTextureType_DIFFUSE, "texture_diffuse");
-			textures_loaded.insert(textures_loaded.end(), diffuseMaps.begin(), diffuseMaps.end());
-			
-			vector<Texture> specularMaps = loadMaterialTextures(mtl, aiTextureType_SPECULAR, "texture_specular");
-			textures_loaded.insert(textures_loaded.end(), specularMaps.begin(), specularMaps.end());
-		}
+		loadMaterialProperties(mesh, mtl);
 
 		for (unsigned int t = 0; t < mesh->mNumFaces; ++t) 
 		{
@@ -272,8 +270,10 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 			
 			for(unsigned int i = 0; i < face->mNumIndices; i++) 
 			{
+				numIndices++;
 				int index = face->mIndices[i];
 				
+				//colors
 				if(mesh->mColors[0] != NULL) {
 					vboColors.push_back(0.2);
 					vboColors.push_back(0.7);
@@ -281,23 +281,78 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 					vboColors.push_back(1.0);
 				}
 				
+				//normals
 				if(mesh->mNormals != NULL) {
 					vboNormals.push_back(mesh->mNormals[index].x);
 					vboNormals.push_back(mesh->mNormals[index].y);
 					vboNormals.push_back(mesh->mNormals[index].z);
 				}
 				
+				//vertices
 				vboVertices.push_back(mesh->mVertices[index].x);
 				vboVertices.push_back(mesh->mVertices[index].y);
 				vboVertices.push_back(mesh->mVertices[index].z);
 				totVertices++;
-				
 			}
 		}
 	}
 
 	for (unsigned int n = 0; n < nd->mNumChildren; ++n) {
 		totVertices += traverseScene(sc, nd->mChildren[n]);
+	}
+	
+	return totVertices;
+}
+
+int processMesh(const aiScene *sc, const aiNode* nd) 
+{
+	int totVertices = 0;
+	/* draw all meshes assigned to this node */
+	for (unsigned int n = 0; n < nd->mNumMeshes; ++n) {
+
+		const aiMesh* mesh = scene->mMeshes[nd->mMeshes[n]];
+		const aiMaterial *mtl = scene->mMaterials[mesh->mMaterialIndex];
+
+		loadMaterialProperties(mesh, mtl);
+
+		// Walk through each of the mesh's vertices
+		for(unsigned int i = 0; i < mesh->mNumVertices; i++)
+		{
+			Vertex vertex;
+			glm::vec3 vector;
+			// positions
+			vector.x = mesh->mVertices[i].x;
+			vector.y = mesh->mVertices[i].y;
+			vector.z = mesh->mVertices[i].z;
+			vertex.Position = vector;
+			// normals
+			vector.x = mesh->mNormals[i].x;
+			vector.y = mesh->mNormals[i].y;
+			vector.z = mesh->mNormals[i].z;
+			vertex.Normal = vector;
+			//coordenadas de textura
+			if (mesh->HasTextureCoords(0)){	
+				glm::vec2 vec;
+				vec.x = mesh->mTextureCoords[0][i].x;
+				vec.y = mesh->mTextureCoords[0][i].y;
+				vertex.TexCoords = vec;		
+			}else
+				vertex.TexCoords = glm::vec2(0.0f, 0.0f);
+		}
+		
+		for(unsigned int i = 0; i < mesh->mNumFaces; i++)
+		{
+			aiFace face = mesh->mFaces[i];
+		
+			for(unsigned int j = 0; j < face.mNumIndices; j++){
+				indices.push_back(face.mIndices[j]);
+				totVertices++;
+			}
+		}
+	}
+
+	for (unsigned int n = 0; n < nd->mNumChildren; ++n) {
+		totVertices += processMesh(sc, nd->mChildren[n]);
 	}
 	
 	return totVertices;
@@ -311,46 +366,36 @@ void createVBOs(const aiScene *sc) {
 
 	int totVertices = 0;
 	cout << "Scene:	 	#Meshes 	= " << sc->mNumMeshes << endl;
-	cout << "			#Textures	= " << sc->mNumTextures << endl;
 
-	totVertices = traverseScene(sc, sc->mRootNode);
+	totVertices = processMesh(sc, sc->mRootNode);//traverseScene(sc, sc->mRootNode);
 
 	cout << "			#Vertices	= " << totVertices << endl;
 	cout << "			#vboVertices= " << vboVertices.size() << endl;
 	cout << "			#vboColors= " << vboColors.size() << endl;
 	cout << "			#vboNormals= " << vboNormals.size() << endl;
-	cout << "			#vboTexture= " << vboTextures.size() << endl;
 
+	// glGenBuffers(3, meshVBO);
 
-	glGenBuffers(4, meshVBO);
-	
-	glBindBuffer(	GL_ARRAY_BUFFER, meshVBO[0]);
+	// glBindVertexArray(meshVBO[0]);
+	// glBindVertexArray(meshVBO[1]);
+	// glBindVertexArray(meshVBO[2]);
 
-	glBufferData(	GL_ARRAY_BUFFER, vboVertices.size()*sizeof(float), 
-					vboVertices.data(), GL_STATIC_DRAW);
+	// glBindBuffer(	GL_ARRAY_BUFFER, meshVBO[0]);
 
-	glBindBuffer(	GL_ARRAY_BUFFER, meshVBO[1]);
+	// glBufferData(	GL_ARRAY_BUFFER, vboVertices.size()*sizeof(float), 
+	// 				vboVertices.data(), GL_STATIC_DRAW);
 
-	glBufferData(	GL_ARRAY_BUFFER, vboColors.size()*sizeof(float), 
-	 				vboColors.data(), GL_STATIC_DRAW);
+	// glBindBuffer(	GL_ARRAY_BUFFER, meshVBO[1]);
 
-	if (vboNormals.size() > 0) {
-		glBindBuffer(	GL_ARRAY_BUFFER, meshVBO[2]);
+	// glBufferData(	GL_ARRAY_BUFFER, vboColors.size()*sizeof(float), 
+	//  				vboColors.data(), GL_STATIC_DRAW);
 
-		glBufferData(	GL_ARRAY_BUFFER, vboNormals.size()*sizeof(float), 
-						vboNormals.data(), GL_STATIC_DRAW);
-	}
-	
-	if(vboTextures.size() > 0){
-		glBindBuffer(GL_ARRAY_BUFFER, meshVBO[3]);
-		glBufferData(GL_ARRAY_BUFFER, vboTextures.size()*sizeof(float), vboTextures.data(), GL_STATIC_DRAW);
-	}
-		// 	glGenBuffers(1, &buffer);
-		// 	glBindBuffer(GL_ARRAY_BUFFER, buffer);
-		// 	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*2*mesh->mNumVertices, texCoords, GL_STATIC_DRAW);
-		// 	glEnableVertexAttribArray(texCoordLoc);
-		// 	glVertexAttribPointer(texCoordLoc, 2, GL_FLOAT, 0, 0, 0);
-		// }
+	// if (vboNormals.size() > 0) {
+	// 	glBindBuffer(	GL_ARRAY_BUFFER, meshVBO[2]);
+
+	// 	glBufferData(	GL_ARRAY_BUFFER, vboNormals.size()*sizeof(float), 
+	// 					vboNormals.data(), GL_STATIC_DRAW);
+	// }
 
 	meshSize = vboVertices.size() / 3;
 	cout << "			#meshSize= " << meshSize << endl;
@@ -360,18 +405,9 @@ void createVBOs(const aiScene *sc) {
 /// **
 /// ***********************************************************************
 
-void createAxis() {
-
-	GLfloat vertices[]  = 	{ 	0.0, 0.0, 0.0,
-								scene_max.x*2, 0.0, 0.0,
-								0.0, scene_max.y*2, 0.0,
-								0.0, 0.0, scene_max.z*2
-							}; 
-
-	GLuint lines[]  = 	{ 	0, 3,
-							0, 2,
-							0, 1
-						}; 
+void setupMesh()
+{
+	int attrP = 0, attrN = 1, attrT = 2, attrC = 3;
 
 	GLfloat colors[]  = { 	1.0, 1.0, 1.0, 1.0,
 							1.0, 0.0, 0.0, 1.0,
@@ -379,103 +415,54 @@ void createAxis() {
 							0.0, 0.0, 1.0, 1.0
 						}; 
 
-	GLfloat textures[]= { 	1.0, 1.0,
-							1.0, 0.0,
-							0.0, 0.0,
-							0.0, 1.0
-						}; 
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+	glGenBuffers(1, &EBO);
+
+	glBindVertexArray(VAO);
 	
-	glGenBuffers(4, axisVBO);
-
-	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[0]);
-
-	glBufferData(GL_ARRAY_BUFFER, 4*3*sizeof(float), vertices, GL_STATIC_DRAW);
-
-	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[1]);
-
-	glBufferData(GL_ARRAY_BUFFER, 4*4*sizeof(float), colors, GL_STATIC_DRAW);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, axisVBO[2]);
-
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, 3*2*sizeof(unsigned int), lines, GL_STATIC_DRAW);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, axisVBO[3]);
-
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, 4*2*sizeof(float), textures, GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	
+	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), &vertices[0], GL_STATIC_DRAW);  
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
+
+	// vertex Positions
+	glEnableVertexAttribArray(attrP);	
+	glVertexAttribPointer(attrP, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+
+	// vertex normals
+	glEnableVertexAttribArray(attrN);	
+	glVertexAttribPointer(attrN, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
+
+	// vertex texture coords
+	glEnableVertexAttribArray(attrT);	
+	glVertexAttribPointer(attrT, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
+
+	// vertex colors
+	glEnableVertexAttribArray(attrC);	
+	glVertexAttribPointer(attrC, 4, GL_FLOAT, GL_FALSE, 0, 0);
+
+	glBindVertexArray(0);
 }
 		
 /// ***********************************************************************
 /// **
 /// ***********************************************************************
 
-void drawAxis(GLuint shader) {
+// render the mesh
+void Draw() 
+{
+	// draw mesh
+	glBindVertexArray(VAO);
+	glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+	glBindVertexArray(0);
 
-	int attrV, attrC, attrT; 
-	
-	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[0]); 		
-	attrV = glGetAttribLocation(shader, "aPosition");
-	glVertexAttribPointer(attrV, 3, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(attrV);
-
-	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[1]); 		
-	attrC = glGetAttribLocation(shader, "aColor");
-	glVertexAttribPointer(attrC, 4, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(attrC);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, axisVBO[2]);
-	glDrawElements(GL_LINES, 6, GL_UNSIGNED_INT, BUFFER_OFFSET(0));
-
-	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[3]); 	
-	attrT = glGetAttribLocation(shader, "aText");
-	glVertexAttribPointer(attrT, 2, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(attrT);  
-
-	glDisableVertexAttribArray(attrV);
-	glDisableVertexAttribArray(attrC);
-
-	glBindBuffer(GL_ARRAY_BUFFER, 0); 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); 
+	// always good practice to set everything back to defaults once configured.
+	glActiveTexture(GL_TEXTURE0);
 }
-		
-/// ***********************************************************************
-/// **
-/// ***********************************************************************
 
-void drawMesh(GLuint shader) {
-
-	int attrV, attrC, attrN, attrT; 
-	
-	glBindBuffer(GL_ARRAY_BUFFER, meshVBO[0]); 		
-	attrV = glGetAttribLocation(shader, "aPosition");
-	glVertexAttribPointer(attrV, 3, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(attrV);
-
-	glBindBuffer(GL_ARRAY_BUFFER, meshVBO[1]); 		
-	attrC = glGetAttribLocation(shader, "aColor");
-	glVertexAttribPointer(attrC, 4, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(attrC);
-
-	glBindBuffer(GL_ARRAY_BUFFER, meshVBO[2]); 		
-	attrN = glGetAttribLocation(shader, "aNormal");
-	glVertexAttribPointer(attrN, 3, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(attrN);
-
-	glBindBuffer(GL_ARRAY_BUFFER, meshVBO[3]);
-	attrT = glGetAttribLocation(shader, "aTexture");
-	glVertexAttribPointer(attrT, 2, GL_FLOAT, 0, 0, 0);
-	glEnableVertexAttribArray(attrT);
-
-	glDrawArrays(GL_TRIANGLES, 0, meshSize); 
-
-	glDisableVertexAttribArray(attrV);
-	glDisableVertexAttribArray(attrC);
-	glDisableVertexAttribArray(attrN);
-	glDisableVertexAttribArray(attrT);
-
-	glBindBuffer(GL_ARRAY_BUFFER, 0); 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); 
-}
 		
 void displayGooch(void) {
 
@@ -533,14 +520,19 @@ void displayGooch(void) {
 	loc = glGetUniformLocation( shaderGooch, "uDiffuseCool" );
 	glUniform2f(loc, 1, diffCool);
 	
-    drawAxis(shaderGooch);
-	drawMesh(shaderGooch);
+    Draw();
 
 }
 
 void displayPhong(void) {
 
 	angleY += 0.02;
+
+	// bind appropriate textures
+	unsigned int diffuseNr  = 1;
+	unsigned int specularNr = 1;
+	unsigned int normalNr   = 1;
+	unsigned int heightNr   = 1;
 
 	float Max = max(scene_max.x, max(scene_max.y, scene_max.z));
 
@@ -589,9 +581,10 @@ void displayPhong(void) {
 	glUniform4fv(loc, 1, glm::value_ptr(diffColor));
 	loc = glGetUniformLocation( shaderPhong, "uSpec" );
 	glUniform4fv(loc, 1, glm::value_ptr(specColor));
-
-  	drawAxis(shaderPhong);
-	drawMesh(shaderPhong);
+		
+	Draw();
+  	// drawAxis(shaderPhong);
+	// drawMesh(shaderPhong);
 
 }
 
@@ -603,9 +596,11 @@ void displayBoth(void){
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
    	
 	glViewport(0, 0, winWidth, winHeight);
+
   	displayPhong();
 
 	glViewport(winWidth, 0, winWidth, winHeight);
+	
 	displayGooch();
     
 	glFlush();
@@ -700,7 +695,7 @@ static GLFWwindow* initGLFW(char* nameWin, int w, int h) {
 	if (!glfwInit())
 	    exit(EXIT_FAILURE);
 
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
 	GLFWwindow* window = glfwCreateWindow(w, h, nameWin, NULL, NULL);
@@ -791,7 +786,7 @@ static void loadMesh(char* filename) {
 	scene_max.y *= 1.2;
 	scene_max.z *= 1.2;
 
-	createAxis();
+	//createAxis();
 
 	if(scene_list == 0) 
 		createVBOs(scene);
@@ -811,8 +806,7 @@ int main(int argc, char *argv[]) {
 
     GLFWwindow* window;
 
-	char meshFilename[] = "models/cat/cat.obj";
-	char filename[] = "models/cat/cat-atlas.jpg";
+	char meshFilename[] = "models/bunny.obj";
 
     window = initGLFW(argv[0], winWidth, winHeight);
 

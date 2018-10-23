@@ -1,4 +1,4 @@
-#version 130
+#version 330 core
 
 precision mediump float; 
 
@@ -7,6 +7,8 @@ uniform vec3 uCamPos;
 
 in vec3 vNormal; 
 in vec3 vPosW;
+
+in vec2 vTexCoord;
 
 out vec4 FragColor;
 
@@ -29,4 +31,5 @@ void main(void) {
 	vec4 specular = vec4(lColor.rgb * matSpec.rgb * pow(cOmega,20.0), matSpec.a); 
 	
 	FragColor = clamp(ambient + diffuse + specular, 0.0, 1.0); 
+	
 	} 	
