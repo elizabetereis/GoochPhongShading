@@ -39,7 +39,7 @@ using namespace std;
 
 GLuint shaderPhong,shaderGooch;
 
-GLuint 	axisVBO[4];
+GLuint 	axisVBO[3];
 GLuint 	meshVBO[4];
 GLuint 	meshSize;
 
@@ -62,7 +62,7 @@ double  last;
 vector<GLfloat> vboVertices;
 vector<GLfloat> vboNormals;
 vector<GLfloat> vboColors;
-vector<glm::vec2> vboTextures;
+vector<GLfloat> vboTextCoord;
 
 struct MaterialProperties mMaterial;
 vector<Texture> textures_loaded; 
@@ -79,11 +79,6 @@ float 	angleX 	= 	0.0f,
 const aiScene* scene = NULL;
 GLuint scene_list = 0;
 aiVector3D scene_min, scene_max, scene_center;
-
-// images / texture
-// map image filenames to textureIds
-// pointer to texture Array
-std::map<std::string, GLuint> textureIdMap;	
 
 /// ***********************************************************************
 /// **
@@ -222,9 +217,6 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 		aiColor4D ambient;
 		aiColor4D diffuse;
 		aiColor4D specular;
-		aiString texPath;
-		float ilum = 1.0f;
-		int shine;
 		
 		if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_AMBIENT, &ambient)){
 			mMaterial.ambient = ambient;
@@ -238,27 +230,16 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 			mMaterial.specular = specular;
 		}
 		
-		// if (AI_SUCCESS == aiGetMaterialFloat(mtl, AI_MATKEY_REFRACTI, &ilum)){ //TODO: wrong matkey
-		// 	cout << "Ilum " << ilum << endl;
-		// }
-		
-		// if (AI_SUCCESS == aiGetMaterialInteger(mtl, AI_MATKEY_SHININESS, &shine)){//TODO: wrong matkey
-		// 	cout << "Shine " << shine << endl;
-		// }
-
 		if (mesh->HasTextureCoords(0)) 
 		{	
 			for (unsigned int k = 0; k < mesh->mNumVertices; k++) {
-				glm::vec2 vec;
-				vec.x = mesh->mTextureCoords[0][k].x;
-				vec.y = mesh->mTextureCoords[0][k].y;
-				vboTextures.push_back(vec);		
+				vboTextCoord.push_back(mesh->mTextureCoords[0][k].x);
+				vboTextCoord.push_back(mesh->mTextureCoords[0][k].y);		
 			}
-		}else
-    		vboTextures.push_back(glm::vec2(0.0f, 0.0f));
+		}
 
 		if(mesh->mMaterialIndex >= 0)
-		{
+		{	
 			vector<Texture> diffuseMaps = loadMaterialTextures(mtl, aiTextureType_DIFFUSE, "texture_diffuse");
 			textures_loaded.insert(textures_loaded.end(), diffuseMaps.begin(), diffuseMaps.end());
 			
@@ -319,7 +300,7 @@ void createVBOs(const aiScene *sc) {
 	cout << "			#vboVertices= " << vboVertices.size() << endl;
 	cout << "			#vboColors= " << vboColors.size() << endl;
 	cout << "			#vboNormals= " << vboNormals.size() << endl;
-	cout << "			#vboTexture= " << vboTextures.size() << endl;
+	cout << "			#textureCoord= " << vboTextCoord.size() << endl;
 
 
 	glGenBuffers(4, meshVBO);
@@ -333,24 +314,19 @@ void createVBOs(const aiScene *sc) {
 
 	glBufferData(	GL_ARRAY_BUFFER, vboColors.size()*sizeof(float), 
 	 				vboColors.data(), GL_STATIC_DRAW);
+	
+	if(vboTextCoord.size() > 0){
+		glBindBuffer(GL_ARRAY_BUFFER, meshVBO[2]);
+		glBufferData(GL_ARRAY_BUFFER, vboTextCoord.size()*sizeof(float), 
+			vboTextCoord.data(), GL_STATIC_DRAW);
+	}
 
 	if (vboNormals.size() > 0) {
-		glBindBuffer(	GL_ARRAY_BUFFER, meshVBO[2]);
+		glBindBuffer(	GL_ARRAY_BUFFER, meshVBO[3]);
 
 		glBufferData(	GL_ARRAY_BUFFER, vboNormals.size()*sizeof(float), 
 						vboNormals.data(), GL_STATIC_DRAW);
 	}
-	
-	if(vboTextures.size() > 0){
-		glBindBuffer(GL_ARRAY_BUFFER, meshVBO[3]);
-		glBufferData(GL_ARRAY_BUFFER, vboTextures.size()*sizeof(float), vboTextures.data(), GL_STATIC_DRAW);
-	}
-		// 	glGenBuffers(1, &buffer);
-		// 	glBindBuffer(GL_ARRAY_BUFFER, buffer);
-		// 	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*2*mesh->mNumVertices, texCoords, GL_STATIC_DRAW);
-		// 	glEnableVertexAttribArray(texCoordLoc);
-		// 	glVertexAttribPointer(texCoordLoc, 2, GL_FLOAT, 0, 0, 0);
-		// }
 
 	meshSize = vboVertices.size() / 3;
 	cout << "			#meshSize= " << meshSize << endl;
@@ -378,14 +354,8 @@ void createAxis() {
 							0.0, 1.0, 0.0, 1.0,
 							0.0, 0.0, 1.0, 1.0
 						}; 
-
-	GLfloat textures[]= { 	1.0, 1.0,
-							1.0, 0.0,
-							0.0, 0.0,
-							0.0, 1.0
-						}; 
 	
-	glGenBuffers(4, axisVBO);
+	glGenBuffers(3, axisVBO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[0]);
 
@@ -398,10 +368,6 @@ void createAxis() {
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, axisVBO[2]);
 
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, 3*2*sizeof(unsigned int), lines, GL_STATIC_DRAW);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, axisVBO[3]);
-
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, 4*2*sizeof(float), textures, GL_STATIC_DRAW);
 	
 }
 		
@@ -411,7 +377,7 @@ void createAxis() {
 
 void drawAxis(GLuint shader) {
 
-	int attrV, attrC, attrT; 
+	int attrV, attrC; 
 	
 	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[0]); 		
 	attrV = glGetAttribLocation(shader, "aPosition");
@@ -425,11 +391,6 @@ void drawAxis(GLuint shader) {
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, axisVBO[2]);
 	glDrawElements(GL_LINES, 6, GL_UNSIGNED_INT, BUFFER_OFFSET(0));
-
-	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[3]); 	
-	attrT = glGetAttribLocation(shader, "aText");
-	glVertexAttribPointer(attrT, 2, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(attrT);  
 
 	glDisableVertexAttribArray(attrV);
 	glDisableVertexAttribArray(attrC);
@@ -462,8 +423,8 @@ void drawMesh(GLuint shader) {
 	glEnableVertexAttribArray(attrN);
 
 	glBindBuffer(GL_ARRAY_BUFFER, meshVBO[3]);
-	attrT = glGetAttribLocation(shader, "aTexture");
-	glVertexAttribPointer(attrT, 2, GL_FLOAT, 0, 0, 0);
+	attrT = glGetAttribLocation(shader, "aTexcoord");
+	glVertexAttribPointer(attrT, 3, GL_FLOAT, 0, 0, 0);
 	glEnableVertexAttribArray(attrT);
 
 	glDrawArrays(GL_TRIANGLES, 0, meshSize); 
@@ -544,7 +505,6 @@ void displayPhong(void) {
 
 	float Max = max(scene_max.x, max(scene_max.y, scene_max.z));
 
-	glm::vec3 lightPos	= glm::vec3(Max, Max, 0.0);	
 	glm::vec3 camPos	= glm::vec3(1.5f*Max,  1.5f*Max, 1.5f*Max);
 	glm::vec3 lookAt	= glm::vec3(scene_center.x, scene_center.y, scene_center.z);
 	glm::vec3 up		= glm::vec3(0.0, 1.0, 0.0);
@@ -561,8 +521,6 @@ void displayPhong(void) {
 	ModelMat = glm::rotate( ModelMat, angleZ, glm::vec3(0.0, 0.0, 1.0));
 
 	glm::mat4 MVP 			= ProjMat * ViewMat * ModelMat;
-	
-	glm::mat4 normalMat		= glm::transpose(glm::inverse(ModelMat));
 
 	glm::vec4 ambColor = color4_to_vec4(mMaterial.ambient);
 	glm::vec4 diffColor = color4_to_vec4(mMaterial.diffuse);
@@ -572,21 +530,13 @@ void displayPhong(void) {
 		
 	int loc = glGetUniformLocation( shaderPhong, "uMVP" );
 	glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(MVP));
-
-	loc = glGetUniformLocation( shaderPhong, "uN" );
-	glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(normalMat));
-	loc = glGetUniformLocation( shaderPhong, "uM" );
-	glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(ModelMat));
-	
-	loc = glGetUniformLocation( shaderPhong, "uLPos" );
-	glUniform3fv(loc, 1, glm::value_ptr(lightPos));
-	loc = glGetUniformLocation( shaderPhong, "uCamPos" );
-	glUniform3fv(loc, 1, glm::value_ptr(camPos));
 	
 	loc = glGetUniformLocation( shaderPhong, "uAmb" );
 	glUniform4fv(loc, 1, glm::value_ptr(ambColor));
+	
 	loc = glGetUniformLocation( shaderPhong, "uDiff" );
 	glUniform4fv(loc, 1, glm::value_ptr(diffColor));
+	
 	loc = glGetUniformLocation( shaderPhong, "uSpec" );
 	glUniform4fv(loc, 1, glm::value_ptr(specColor));
 
@@ -811,9 +761,7 @@ int main(int argc, char *argv[]) {
 
     GLFWwindow* window;
 
-	char meshFilename[] = "models/cat/cat.obj";
-	char filename[] = "models/cat/cat-atlas.jpg";
-
+	char meshFilename[] = "models/bench/bench.obj";
     window = initGLFW(argv[0], winWidth, winHeight);
 
     initASSIMP();
