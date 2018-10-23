@@ -167,6 +167,12 @@ unsigned int TextureFromFile(const char *filename)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	
+	// Habilitar o uso de texturas
+ 	glEnable ( GL_TEXTURE_2D );
+
+ 	// Definir a forma de armazenamento dos pixels na textura (1= alinhamento por byte)
+ 	glPixelStorei ( GL_UNPACK_ALIGNMENT, 1 ); 
 
     unsigned int textureID;
     glGenTextures(1, &textureID);
