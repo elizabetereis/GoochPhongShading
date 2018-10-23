@@ -17,8 +17,6 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-#include <IL/il.h>
-
 #include <GL/glew.h>
 
 #include <GLFW/glfw3.h>
@@ -48,7 +46,6 @@ struct MaterialProperties{
 	aiColor4D diffuse;
 	aiColor4D ambient;
 	aiColor4D specular;
-	int texCount;
 };
 
 struct Texture {
@@ -58,11 +55,14 @@ struct Texture {
 };
 
 double  last;
+string directory = "models/";
 
 vector<GLfloat> vboVertices;
 vector<GLfloat> vboNormals;
 vector<GLfloat> vboColors;
 vector<GLfloat> vboTextCoord;
+
+vector<GLint> vboIndices;
 
 struct MaterialProperties mMaterial;
 vector<Texture> textures_loaded; 
@@ -145,9 +145,9 @@ void set_float4(float f[4], float a, float b, float c, float d)
 /// ***********************************************************************
 /// **
 /// ***********************************************************************
-unsigned int TextureFromFile(const char *path)
+unsigned int TextureFromFile(const char *name)
 {
-    string filename = "models/cat/cat-atlas.jpg";
+    string filename = directory + name;
 
 	glEnable ( GL_TEXTURE_2D );
 
@@ -276,6 +276,9 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 					vboNormals.push_back(mesh->mNormals[index].y);
 					vboNormals.push_back(mesh->mNormals[index].z);
 				}
+
+				
+				vboIndices.push_back(index);
 				
 				//vertices
 				vboVertices.push_back(mesh->mVertices[index].x);
@@ -337,7 +340,7 @@ void createVBOs(const aiScene *sc) {
 		glBufferData(GL_ARRAY_BUFFER, vboTextCoord.size()*sizeof(float), 
 		vboTextCoord.data(), GL_STATIC_DRAW);
 	}
-
+	
 	meshSize = vboVertices.size() / 3;
 	cout << "			#meshSize= " << meshSize << endl;
 }
@@ -347,37 +350,20 @@ void createVBOs(const aiScene *sc) {
 /// ***********************************************************************
 
 void createAxis() {
-
-	GLfloat vertices[]  = 	{ 	0.0, 0.0, 0.0,
-								scene_max.x*2, 0.0, 0.0,
-								0.0, scene_max.y*2, 0.0,
-								0.0, 0.0, scene_max.z*2
-							}; 
-
-	GLuint lines[]  = 	{ 	0, 3,
-							0, 2,
-							0, 1
-						}; 
-
-	GLfloat colors[]  = { 	1.0, 1.0, 1.0, 1.0,
-							1.0, 0.0, 0.0, 1.0,
-							0.0, 1.0, 0.0, 1.0,
-							0.0, 0.0, 1.0, 1.0
-						}; 
 	
 	glGenBuffers(3, axisVBO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[0]);
 
-	glBufferData(GL_ARRAY_BUFFER, 4*3*sizeof(float), vertices, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, vboVertices.size()*sizeof(float), vboVertices.data(), GL_STATIC_DRAW);
 
 	glBindBuffer(GL_ARRAY_BUFFER, axisVBO[1]);
 
-	glBufferData(GL_ARRAY_BUFFER, 4*4*sizeof(float), colors, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, vboColors.size()*sizeof(float), vboColors.data(), GL_STATIC_DRAW);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, axisVBO[2]);
 
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, 3*2*sizeof(unsigned int), lines, GL_STATIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, vboIndices.size()*sizeof(unsigned int), vboIndices.data(), GL_STATIC_DRAW);
 	
 }
 		
@@ -660,7 +646,7 @@ static GLFWwindow* initGLFW(char* nameWin, int w, int h) {
 	if (!glfwInit())
 	    exit(EXIT_FAILURE);
 
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
 	GLFWwindow* window = glfwCreateWindow(w, h, nameWin, NULL, NULL);
@@ -723,7 +709,8 @@ static void initASSIMP() {
 
 static void loadMesh(char* filename) {
 
-	scene = aiImportFile(filename, aiProcessPreset_TargetRealtime_MaxQuality);
+	string path = directory + filename;
+	scene = aiImportFile(path.c_str(), aiProcessPreset_TargetRealtime_MaxQuality);
 
 	if (!scene) {
 		cout << "## ERROR loading mesh" << endl;
