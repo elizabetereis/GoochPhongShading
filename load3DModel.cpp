@@ -149,6 +149,8 @@ unsigned int TextureFromFile(const char *path)
 {
     string filename = "models/cat/cat-atlas.jpg";
 
+	glEnable ( GL_TEXTURE_2D );
+
     unsigned int textureID;
     glGenTextures(1, &textureID);
 
@@ -173,14 +175,13 @@ unsigned int TextureFromFile(const char *path)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        stbi_image_free(data);
     }
     else
     {
         std::cout << "Texture failed to load at path: " << filename << std::endl;
-        stbi_image_free(data);
     }
+
+	stbi_image_free(data);
 
     return textureID;
 }
@@ -202,6 +203,43 @@ vector<Texture> loadMaterialTextures(const aiMaterial *mat, aiTextureType type, 
     }
 
     return textures;
+}
+
+void loadMaterialProperties(const aiMesh* mesh, const aiMaterial *mtl){
+
+	aiColor4D ambient;
+	aiColor4D diffuse;
+	aiColor4D specular;
+	
+	//colors
+	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_AMBIENT, &ambient)){
+		mMaterial.ambient = ambient;
+	}
+
+	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_DIFFUSE, &diffuse)){
+		mMaterial.diffuse = diffuse;
+	}
+	
+	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_SPECULAR, &specular)){
+		mMaterial.specular = specular;
+	}
+
+	//textures
+	if(mesh->mMaterialIndex >= 0)
+	{
+		vector<Texture> diffuseMaps = loadMaterialTextures(mtl, aiTextureType_DIFFUSE, "texture_diffuse");
+		textures_loaded.insert(textures_loaded.end(), diffuseMaps.begin(), diffuseMaps.end());
+		
+		vector<Texture> specularMaps = loadMaterialTextures(mtl, aiTextureType_SPECULAR, "texture_specular");
+		textures_loaded.insert(textures_loaded.end(), specularMaps.begin(), specularMaps.end());
+
+        std::vector<Texture> normalMaps = loadMaterialTextures(mtl, aiTextureType_HEIGHT, "texture_normal");
+        textures_loaded.insert(textures_loaded.end(), normalMaps.begin(), normalMaps.end());
+
+        std::vector<Texture> heightMaps = loadMaterialTextures(mtl, aiTextureType_AMBIENT, "texture_height");
+        textures_loaded.insert(textures_loaded.end(), heightMaps.begin(), heightMaps.end());
+	}
+
 }  
 
 int traverseScene(	const aiScene *sc, const aiNode* nd) {
@@ -214,38 +252,7 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 		const aiMesh* mesh = scene->mMeshes[nd->mMeshes[n]];
 		const aiMaterial *mtl = scene->mMaterials[mesh->mMaterialIndex];
 
-		aiColor4D ambient;
-		aiColor4D diffuse;
-		aiColor4D specular;
-		
-		if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_AMBIENT, &ambient)){
-			mMaterial.ambient = ambient;
-		}
-
-    	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_DIFFUSE, &diffuse)){
-			mMaterial.diffuse = diffuse;
-		}
-		
-		if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_SPECULAR, &specular)){
-			mMaterial.specular = specular;
-		}
-		
-		if (mesh->HasTextureCoords(0)) 
-		{	
-			for (unsigned int k = 0; k < mesh->mNumVertices; k++) {
-				vboTextCoord.push_back(mesh->mTextureCoords[0][k].x);
-				vboTextCoord.push_back(mesh->mTextureCoords[0][k].y);		
-			}
-		}
-
-		if(mesh->mMaterialIndex >= 0)
-		{	
-			vector<Texture> diffuseMaps = loadMaterialTextures(mtl, aiTextureType_DIFFUSE, "texture_diffuse");
-			textures_loaded.insert(textures_loaded.end(), diffuseMaps.begin(), diffuseMaps.end());
-			
-			vector<Texture> specularMaps = loadMaterialTextures(mtl, aiTextureType_SPECULAR, "texture_specular");
-			textures_loaded.insert(textures_loaded.end(), specularMaps.begin(), specularMaps.end());
-		}
+		loadMaterialProperties(mesh, mtl);
 
 		for (unsigned int t = 0; t < mesh->mNumFaces; ++t) 
 		{
@@ -255,6 +262,7 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 			{
 				int index = face->mIndices[i];
 				
+				//colors
 				if(mesh->mColors[0] != NULL) {
 					vboColors.push_back(0.2);
 					vboColors.push_back(0.7);
@@ -262,12 +270,14 @@ int traverseScene(	const aiScene *sc, const aiNode* nd) {
 					vboColors.push_back(1.0);
 				}
 				
+				//normals
 				if(mesh->mNormals != NULL) {
 					vboNormals.push_back(mesh->mNormals[index].x);
 					vboNormals.push_back(mesh->mNormals[index].y);
 					vboNormals.push_back(mesh->mNormals[index].z);
 				}
 				
+				//vertices
 				vboVertices.push_back(mesh->mVertices[index].x);
 				vboVertices.push_back(mesh->mVertices[index].y);
 				vboVertices.push_back(mesh->mVertices[index].z);
@@ -314,18 +324,18 @@ void createVBOs(const aiScene *sc) {
 
 	glBufferData(	GL_ARRAY_BUFFER, vboColors.size()*sizeof(float), 
 	 				vboColors.data(), GL_STATIC_DRAW);
-	
-	if(vboTextCoord.size() > 0){
-		glBindBuffer(GL_ARRAY_BUFFER, meshVBO[2]);
-		glBufferData(GL_ARRAY_BUFFER, vboTextCoord.size()*sizeof(float), 
-			vboTextCoord.data(), GL_STATIC_DRAW);
-	}
 
 	if (vboNormals.size() > 0) {
-		glBindBuffer(	GL_ARRAY_BUFFER, meshVBO[3]);
+		glBindBuffer(	GL_ARRAY_BUFFER, meshVBO[2]);
 
 		glBufferData(	GL_ARRAY_BUFFER, vboNormals.size()*sizeof(float), 
 						vboNormals.data(), GL_STATIC_DRAW);
+	}
+
+	if(vboTextCoord.size() > 0){
+		glBindBuffer(GL_ARRAY_BUFFER, meshVBO[3]);
+		glBufferData(GL_ARRAY_BUFFER, vboTextCoord.size()*sizeof(float), 
+		vboTextCoord.data(), GL_STATIC_DRAW);
 	}
 
 	meshSize = vboVertices.size() / 3;
