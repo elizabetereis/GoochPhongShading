@@ -15,4 +15,5 @@ void main(void) {
 	vec4 color = clamp(uAmb + uDiff + uSpec, 0.0, 1.0); 
 	//gl_FragColor = texture(uTex, oTexcoord) * color;
 	gl_FragColor = color;
+
 } 	

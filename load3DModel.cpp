@@ -46,6 +46,7 @@ struct MaterialProperties{
 	aiColor4D diffuse;
 	aiColor4D ambient;
 	aiColor4D specular;
+	float shininess;
 };
 
 struct Texture {
@@ -67,13 +68,13 @@ vector<GLint> vboIndices;
 struct MaterialProperties mMaterial;
 vector<Texture> textures_loaded; 
 
-int winWidth 	= 600, 
-	winHeight 	= 600;
+int winWidth = 900, winHeight = 600;
 
-float 	angleX 	= 	0.0f,
-		angleY	= 	0.0f,
-		angleZ	=	0.0f;
+float angleX = 0.0f, angleY	= 0.0f, angleZ = 0.0f;
+float angleMoveX = 0.0f, angleMoveY = 0.0f;
+float lightMoveX = 10.0f, lightMoveY = 10.0f;
 
+bool cameraMove = true;
 
 /* the global Assimp scene object */
 const aiScene* scene = NULL;
@@ -210,6 +211,8 @@ void loadMaterialProperties(const aiMesh* mesh, const aiMaterial *mtl){
 	aiColor4D ambient;
 	aiColor4D diffuse;
 	aiColor4D specular;
+	float shininess = 0.0;
+	unsigned int max;
 	
 	//colors
 	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_AMBIENT, &ambient)){
@@ -223,6 +226,10 @@ void loadMaterialProperties(const aiMesh* mesh, const aiMaterial *mtl){
 	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_SPECULAR, &specular)){
 		mMaterial.specular = specular;
 	}
+
+	if (AI_SUCCESS == aiGetMaterialFloatArray(mtl, AI_MATKEY_SHININESS, &shininess, &max)){
+		mMaterial.shininess = shininess;
+	}	
 
 	//textures
 	if(mesh->mMaterialIndex >= 0)
@@ -363,7 +370,8 @@ void createAxis() {
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, axisVBO[2]);
 
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, vboIndices.size()*sizeof(unsigned int), vboIndices.data(), GL_STATIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, vboIndices.size()*sizeof(unsigned int), 
+		vboIndices.data(), GL_STATIC_DRAW);
 	
 }
 		
@@ -436,11 +444,12 @@ void drawMesh(GLuint shader) {
 		
 void displayGooch(void) {
 
-	angleY += 0.02;
+	angleY += angleMoveY;
+	angleX += angleMoveX;
 
 	float Max = max(scene_max.x, max(scene_max.y, scene_max.z));
 
-	glm::vec3 lightPos	= glm::vec3(Max, Max, 0.0);	
+	glm::vec3 lightPos	= glm::vec3(lightMoveX, lightMoveY, 0.0);		
 	glm::vec3 camPos	= glm::vec3(1.5f*Max,  1.5f*Max, 1.5f*Max);
 	glm::vec3 lookAt	= glm::vec3(scene_center.x, scene_center.y, scene_center.z);
 	glm::vec3 up		= glm::vec3(0.0, 1.0, 0.0);
@@ -497,10 +506,11 @@ void displayGooch(void) {
 
 void displayPhong(void) {
 
-	angleY += 0.02;
+	angleY += angleMoveY;
+	angleX += angleMoveX;
 
 	float Max = max(scene_max.x, max(scene_max.y, scene_max.z));
-
+	glm::vec3 lightPos	= glm::vec3(lightMoveX, lightMoveY, 0.0);	
 	glm::vec3 camPos	= glm::vec3(1.5f*Max,  1.5f*Max, 1.5f*Max);
 	glm::vec3 lookAt	= glm::vec3(scene_center.x, scene_center.y, scene_center.z);
 	glm::vec3 up		= glm::vec3(0.0, 1.0, 0.0);
@@ -548,10 +558,10 @@ void displayBoth(void){
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
    	
-	glViewport(0, 0, winWidth, winHeight);
+	glViewport(0,winHeight/2 - 250,600,550);
   	displayPhong();
 
-	glViewport(winWidth, 0, winWidth, winHeight);
+	glViewport(winWidth*0.4, winHeight/2 - 250,600,550);
 	displayGooch();
     
 	glFlush();
@@ -606,9 +616,12 @@ static void error_callback(int error, const char* description) {
 /*                                                                           */
 /* ************************************************************************* */
 
-static void window_size_callback(GLFWwindow* window, int width, int height) {
+static void window_size_callback(GLFWwindow* window, int newWidth, int newHeight) {
         
-	glViewport(0, 0, width, height);
+	glViewport(0, 0, newWidth, newHeight);
+
+	winWidth = newWidth;
+	winHeight = newHeight;
 }
 
 /* ************************************************************************* */
@@ -619,18 +632,26 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 
 	if (action == GLFW_PRESS)										
 		switch (key) {	
-			case GLFW_KEY_ESCAPE  	: 	glfwSetWindowShouldClose(window, true);
+			case GLFW_KEY_ESCAPE: 	glfwSetWindowShouldClose(window, true);
 										break;
-
-			case '.'				: 	glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);								
+			case GLFW_KEY_LEFT: 	(cameraMove) ? (angleMoveY += 0.025) : (lightMoveY += 1.0);								
 										break;
-
-			case '-'				: 	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);								
+			case GLFW_KEY_RIGHT: 	(cameraMove) ? (angleMoveY -= 0.025) : (lightMoveY -= 1.0);								
 										break;
-
-			case 'F'				:
-			case 'f'				: 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);								
+			case GLFW_KEY_UP: 	(cameraMove) ? (angleMoveX += 0.025) : (lightMoveX += 1.0);								
 										break;
+			case GLFW_KEY_DOWN: 	(cameraMove) ? (angleMoveX -= 0.025) : (lightMoveX -= 1.0);								
+										break;
+			case GLFW_KEY_TAB: 	cameraMove = !cameraMove;								
+										break;
+			case 'r':
+			case 'R': 	angleMoveX = 0.0;
+						angleMoveY = 0.0;
+						lightMoveX = 10.0;
+						lightMoveY = 10.0;
+						angleX 	= 	0.0;
+						angleY	= 	0.0;
+						break;
 			}
 
 }
@@ -758,7 +779,7 @@ int main(int argc, char *argv[]) {
 
     GLFWwindow* window;
 
-	char meshFilename[] = "models/bench/bench.obj";
+	char meshFilename[] = "bench/bench.obj";
     window = initGLFW(argv[0], winWidth, winHeight);
 
     initASSIMP();

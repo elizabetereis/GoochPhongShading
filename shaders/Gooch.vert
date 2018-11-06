@@ -3,7 +3,6 @@
 in vec3 aPosition;
 in vec3 aNormal;
 in vec3 aColor;
-in vec2 aTexcoord;
 
 uniform mat4 uM;
 uniform mat4 uMVP;
@@ -13,7 +12,6 @@ uniform vec3 uLPos;
 out vec3 oNormal;
 out vec3 oLightVector;
 out vec3 oColor;
-out vec2 oTexcoord;
 
 void main(void)
 {
@@ -23,7 +21,6 @@ void main(void)
    oLightVector = uLPos - positionWorld.xyz;
    oNormal = normalWorld;
    oColor = aColor;
-   oTexcoord = aTexcoord;
 
    gl_Position = uMVP * vec4( aPosition, 1.0 );  
 }
