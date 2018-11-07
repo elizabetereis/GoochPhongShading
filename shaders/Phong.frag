@@ -2,17 +2,37 @@
 
 precision mediump float; 
 
-uniform vec4 uAmb;
-uniform vec4 uDiff;
-uniform vec4 uSpec;
+uniform vec3 uLPos;
+uniform vec3 uCamPos;
+uniform vec4 matAmb;
+uniform vec4 matDif;
+uniform vec4 matSpec;
+uniform vec4 lColor;
+
+uniform float shininess;
+
+in vec3 vNormal; 
+in vec3 vPosW;
 
 in vec2 oTexcoord;
 
 uniform sampler2D uTex;
 
 void main(void) {
+
+	vec4 ambient = vec4(lColor.rgb * matAmb.rgb, matAmb.a); 
+
+	vec3 vL = normalize(uLPos - vPosW); 
+	float cTeta = max(dot(vL, vNormal), 0.0); 
+			
+	vec4 diffuse = vec4(lColor.rgb * matDif.rgb * cTeta, matDif.a); 
+
+	vec3 vV = normalize(uCamPos - vPosW); 
+	vec3 vR = normalize(reflect(-vL, vNormal)); 
+	float cOmega = max(dot(vV, vR), 0.0); 
+	vec4 specular = vec4(lColor.rgb * matSpec.rgb * pow(cOmega,20.0), matSpec.a); 
 	
-	vec4 color = clamp(uAmb + uDiff + uSpec, 0.0, 1.0); 
+	vec4 color = clamp(ambient + diffuse + specular, 0.0, 1.0); 
 	//gl_FragColor = texture(uTex, oTexcoord) * color;
 	gl_FragColor = color;
 

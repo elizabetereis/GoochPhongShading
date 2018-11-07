@@ -43,16 +43,16 @@ GLuint 	meshSize;
 
 struct MaterialProperties{
 
-	aiColor4D diffuse;
-	aiColor4D ambient;
-	aiColor4D specular;
+	glm::vec4 diffuse;
+	glm::vec4 ambient;
+	glm::vec4 specular;
 	float shininess;
 };
 
 struct Texture {
     unsigned int id;
     string type;
-    string path;  // we store the path of the texture to compare with other textures
+    string path;
 };
 
 double  last;
@@ -216,23 +216,27 @@ void loadMaterialProperties(const aiMesh* mesh, const aiMaterial *mtl){
 	
 	//colors
 	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_AMBIENT, &ambient)){
-		mMaterial.ambient = ambient;
-	}
+		mMaterial.ambient =  color4_to_vec4(ambient);
+	}else
+		mMaterial.ambient = glm::vec4(0.1, 0.1, 0.1, 1.0);
 
 	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_DIFFUSE, &diffuse)){
-		mMaterial.diffuse = diffuse;
-	}
+		mMaterial.diffuse = color4_to_vec4(diffuse);
+	}else
+		mMaterial.diffuse = glm::vec4(0.3, 1.0, 0.6, 1.0); 
 	
 	if (AI_SUCCESS == aiGetMaterialColor(mtl, AI_MATKEY_COLOR_SPECULAR, &specular)){
-		mMaterial.specular = specular;
-	}
+		mMaterial.specular = color4_to_vec4(specular);
+	}else
+		mMaterial.specular = glm::vec4(1.0, 1.0, 1.0, 1.0);
 
 	if (AI_SUCCESS == aiGetMaterialFloatArray(mtl, AI_MATKEY_SHININESS, &shininess, &max)){
 		mMaterial.shininess = shininess;
-	}	
+	}else
+		mMaterial.shininess = 32.0;
 
 	//textures
-	if(mesh->mMaterialIndex >= 0)
+	if(mtl->GetTextureCount(aiTextureType_SPECULAR) > 0)
 	{
 		vector<Texture> diffuseMaps = loadMaterialTextures(mtl, aiTextureType_DIFFUSE, "texture_diffuse");
 		textures_loaded.insert(textures_loaded.end(), diffuseMaps.begin(), diffuseMaps.end());
@@ -527,24 +531,40 @@ void displayPhong(void) {
 	ModelMat = glm::rotate( ModelMat, angleZ, glm::vec3(0.0, 0.0, 1.0));
 
 	glm::mat4 MVP 			= ProjMat * ViewMat * ModelMat;
-
-	glm::vec4 ambColor = color4_to_vec4(mMaterial.ambient);
-	glm::vec4 diffColor = color4_to_vec4(mMaterial.diffuse);
-	glm::vec4 specColor = color4_to_vec4(mMaterial.specular);
+	glm::mat4 normalMat = glm::transpose(glm::inverse(ModelMat));
+	glm::vec4 lColor	= glm::vec4(1.0, 1.0, 1.0, 1.0); 
 
     glUseProgram(shaderPhong);
-		
-	int loc = glGetUniformLocation( shaderPhong, "uMVP" );
+
+	int loc = glGetUniformLocation( shaderPhong, "uLPos" );
+	glUniform3fv(loc, 1, glm::value_ptr(lightPos));
+
+	loc = glGetUniformLocation( shaderPhong, "uMVP" );
 	glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(MVP));
+
+	loc = glGetUniformLocation( shaderPhong, "uN" );
+	glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(normalMat));
 	
-	loc = glGetUniformLocation( shaderPhong, "uAmb" );
-	glUniform4fv(loc, 1, glm::value_ptr(ambColor));
+	loc = glGetUniformLocation( shaderPhong, "uM" );
+	glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(ModelMat));
+
+	loc = glGetUniformLocation( shaderPhong, "uCamPos" );
+	glUniform3fv(loc, 1, glm::value_ptr(camPos));
 	
-	loc = glGetUniformLocation( shaderPhong, "uDiff" );
-	glUniform4fv(loc, 1, glm::value_ptr(diffColor));
+	loc = glGetUniformLocation( shaderPhong, "matAmb" );
+	glUniform4fv(loc, 1, glm::value_ptr(mMaterial.ambient));
 	
-	loc = glGetUniformLocation( shaderPhong, "uSpec" );
-	glUniform4fv(loc, 1, glm::value_ptr(specColor));
+	loc = glGetUniformLocation( shaderPhong, "matDif" );
+	glUniform4fv(loc, 1, glm::value_ptr(mMaterial.diffuse));
+	
+	loc = glGetUniformLocation( shaderPhong, "matSpec" );
+	glUniform4fv(loc, 1, glm::value_ptr(mMaterial.specular));
+
+	loc = glGetUniformLocation( shaderPhong, "lColor" );
+	glUniform4fv(loc, 1, glm::value_ptr(lColor));
+
+	loc = glGetUniformLocation( shaderPhong, "shininess" );
+	glUniform2f(loc, 1, mMaterial.shininess);
 
   	drawAxis(shaderPhong);
 	drawMesh(shaderPhong);
